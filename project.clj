@@ -6,4 +6,12 @@
   :dependencies [[org.clojure/clojure "1.8.0"]
                  [quil "2.7.1"]]
   :main snake.core
-  :aot :all)
+  :plugins [[io.taylorwood/lein-native-image "0.3.0"]]            
+  ;:aot :all
+  :native-image {:name     "clj-snake"
+                 :jvm-opts ["-Dclojure.compiler.direct-linking=true"]
+                 :opts     ["--report-unsupported-elements-at-runtime"
+                            "--initialize-at-build-time"
+                            "--allow-incomplete-classpath"
+                            ;;avoid spawning build server
+                            "--no-server"]})
