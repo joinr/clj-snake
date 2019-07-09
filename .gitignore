@@ -1,0 +1,7 @@
+target/
+/.project
+/.settings/
+/.classpath
+resources/public/js/development/
+*.clj~
+checkouts/

@@ -1,8 +1,8 @@
 (ns snake.core
-  (:require [clojure.string :as s]
-            [quil [core :as q] [middleware :as qm]])
-  (:import java.awt.event.KeyEvent)
-  (:gen-class))
+  (:require [quil.core :as q
+              #?@(:cljs  [:include-macros true])]
+            [quil.middleware :as qm]
+            #?(:cljs  [cljs.reader])))
 
 ;;utils
 (defn rand-coords
@@ -27,17 +27,19 @@
             (when (hit? x y x2 y2) (reduced p)))
           nil coords))
 
-(def states   #{:beginning :running :paused :over})
-(defn get-time [] (System/currentTimeMillis))
+(defn get-time []
+  #?(:clj  (System/currentTimeMillis)
+     :cljs (.getTime (js/Date.))))
 
-;;file-based stuff (portability layer)
 (defn read-high-score
   [fname]
-  (clojure.edn/read-string (slurp fname)))
+  #?(:cljs     (cljs.reader/read-string (or (.getItem (.-localStorage js/window) fname) "0"))
+     :default  (clojure.edn/read-string (try (slurp fname) (catch Exception e "0")))))
 
 (defn save-high-score
   [fname score]
-  (spit fname score))
+  #?(:cljs     (.setItem (.-localStorage js/window) fname (str score))
+     :default  (clojure.core/spit fname score)))
 
 (defn overwrite-high-score!
   [fname score]
@@ -48,7 +50,7 @@
 ;;state
 (defn ->settings [& {:keys [width height high-score-file size]
                      :or {width 500 height 500 init-apples 2
-                          high-score-file "./score.dat"
+                          high-score-file "score.dat"
                           size 20}}]
   {:game-state  :beginning
    :direction   :left
@@ -112,7 +114,11 @@
     (q/stroke-weight 0)
     (q/background 255 255 255)
     (->state rows cols :size (/ width cols)))
-  ([] (setup 500 500)))
+  ([] (setup {:width 500 :height 500})))
+
+
+(defn new-game [{:keys [rows cols size width height]}]
+  (->state  rows  cols :size size :width width :height height))
 
 ;;convenience layer for defining multiple keybinds.
 (defn expanded-map [m]
@@ -127,8 +133,8 @@
                  [:ArrowDown   :down  :s] :down 
                  [:ArrowUp     :up    :w] :up }))
 
-(def actions (expanded-map {[:Enter :enter   :p +enter+]  :pause}))
 
+(def actions (expanded-map {[:Enter :enter   :p +enter+]  :pause}))
 (defn action-handler [s]
   (case     (:game-state s)
     (:beginning :paused) (assoc s :game-state :running)
@@ -188,9 +194,6 @@
           (assoc :last-move-time t :moving true))
       state)))
 
-(defn new-game [{:keys [rows cols size width height]}]
-  (->state  rows  cols :size size :width width :height height))
-
 (defn update-game [{:keys [game-state direction] :as state}]
   (let [state (update-time state)]
     (case [game-state (:moving state)]   
@@ -205,20 +208,22 @@
 
 (defn state->tiles [{:keys [rows cols apples snake]}]
   (let [filled? (set (concat apples snake))]
-    {(colors :board) (for [x (range rows)
-                           y (range cols)
-                           :when (not (filled? [x y]))]
-                       [x y])
-     (colors :apples) apples
-     (colors :snake)  snake}))
+    (for [x (range rows)
+          y (range cols)
+          :when (not (filled? [x y]))]
+      [x y])))
 
-(defn render-board [{:keys [size rows cols] :as state}]
+(defn render-rects [color voffset size coords]
+  (apply q/fill color)
+  (doseq [[x y]  coords]
+    (q/rect (* x size) (* (- voffset y 1) size) size size)))
+
+(defn render-board [{:keys [size snake apples rows cols] :as state}]
   (q/stroke 0)
   (q/stroke-weight 1)
-  (doseq [[color xs] (state->tiles state)]
-    (apply q/fill color)
-    (doseq [[x y]  xs]
-      (q/rect (* x size) (* (- rows y 1) size) size size))))
+  (render-rects (:board  colors) rows size (state->tiles state))
+  (render-rects (:snake  colors) rows size snake)
+  (render-rects (:apples colors) rows size apples))
 
 (defn show-pause-menu! [{:keys [width height apples high-score-file]}]
   (q/background 173 216 230)
@@ -247,18 +252,22 @@
     :over                    (show-game-over-screen! state)                        
     (:beginning :paused)     (show-pause-menu! state)
     (render-board state)))
-  
-(defn -main [& {:keys [rows cols width height exit?]
-                :or   {rows 20 cols 20 width 500 height 500 exit? false} :as config}]
-  (q/defsketch snake
-    :title "Snake"
-    :size [width height]
-    :settings #(q/smooth 2)
-    :renderer :opengl
-    :setup         #(setup config)
-    :draw          show-game!
-    :update        update-game
-    :key-pressed   (fn [s e] (handle-keys s))
-    :mouse-clicked (fn [s _] (action-handler s))                             
-    :features      (when exit? [:exit-on-close])
-    :middleware    [qm/fun-mode]))
+
+(def +defaults+ {:rows 20 :cols 20 :width 500 :height 500 :exit? false :host "snake"})
+
+(defn play [& {:keys [rows cols width height exit? host] :as settings}]
+  (let [config (merge +defaults+ settings)
+        {:keys [rows cols width height exit?]} config ]
+    (q/defsketch snake
+      :title "Snake"
+      :host (:host config)
+      :size [width height]
+      :settings #(q/smooth 2)
+      :renderer :p2d ;:opengl
+      :setup         #(setup config)
+      :draw          show-game!
+      :update        update-game
+      :key-pressed   (fn [s e] (handle-keys s))
+      :mouse-clicked (fn [s _] (action-handler s))                             
+      :features      (when  exit? [:exit-on-close])
+      :middleware    [qm/fun-mode])))
