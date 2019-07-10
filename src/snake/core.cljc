@@ -71,14 +71,14 @@
         cy (quot cols 2)
         snek  [[cx cy] [(inc cx) cy]]
         snek? (set snek)]
-  (merge (->settings :width (* rows size) :height (* cols size) :size size)
-         {:apples (->> (rand-coords rows cols)
-                       (filter (complement snek?))
-                       (take 1)
-                       vec);;xy coords of apples
-          :snake  snek ;;xy coords of the snake
-          :rows   rows
-          :cols   cols})))
+   (merge (->settings :width (* rows size) :height (* cols size) :size size)
+          {:apples (->> (rand-coords rows cols)
+                        (filter (complement snek?))
+                        (take 1)
+                        vec);;xy coords of apples
+           :snake  snek ;;xy coords of the snake
+           :rows   rows
+           :cols   cols})))
 
 (defn check-collision
   [snake apples bounds]
@@ -109,11 +109,11 @@
 
 (defn setup
   ([{:keys [width height rows cols]}]
-    (q/frame-rate    60)
-    (q/stroke        0)
-    (q/stroke-weight 0)
-    (q/background 255 255 255)
-    (->state rows cols :size (/ width cols)))
+   (q/frame-rate    60)
+   (q/stroke        0)
+   (q/stroke-weight 0)
+   (q/background 255 255 255)
+   (->state rows cols :size (/ width cols)))
   ([] (setup {:width 500 :height 500})))
 
 
@@ -131,7 +131,7 @@
   (expanded-map {[:ArrowLeft   :left  :a] :left 
                  [:ArrowRight  :right :d] :right
                  [:ArrowDown   :down  :s] :down 
-                 [:ArrowUp     :up    :w] :up }))
+                 [:ArrowUp     :up    :w] :up}))
 
 
 (def actions (expanded-map {[:Enter :enter   :p +enter+]  :pause}))
@@ -257,13 +257,14 @@
 
 (defn play [& {:keys [rows cols width height exit? host] :as settings}]
   (let [config (merge +defaults+ settings)
-        {:keys [rows cols width height exit?]} config ]
+        {:keys [rows cols width height exit?]} config]
     (q/defsketch snake
       :title "Snake"
       :host (:host config)
       :size [width height]
       :settings #(q/smooth 2)
-      :renderer :p2d ;:opengl
+      :renderer #?(:clj  :java2d
+                   :clj  :p2d) ;:opengl
       :setup         #(setup config)
       :draw          show-game!
       :update        update-game
